@@ -30,7 +30,6 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  *******************************************************************************
- *
  *                       MSP430 CODE EXAMPLE DISCLAIMER
  *
  * MSP430 code examples are self-contained low-level programs that typically
@@ -75,14 +74,79 @@
 //B1 = 2.569850 * 10 ^ -4
 //C1 = 2.620131 * 10 ^ -6
 //D1 = 6.383091 * 10 ^ -8
+
+//11/27/18 at 11:17 PM
+
+//SET UP TO INTAKE A TEMP BETWEEn 30 - 60 degrees AND THEN OUTPUTS THE TEMP WHEN THE goalTemp IS SENT
+
 #include <msp430.h>
 #include <math.h>
 
+
+int isDataSent = 0;
 float RT = 0;
-float TEMP = 0;
+float currentTemp = 0;
+int goalTemp = 0;
+int deltaTemp = 0;
+int additionalCold = 0;
+int intCurrentTemp = 0;
 
-int intTemp = 0;
+void controlFan(){
+    deltaTemp = goalTemp - intCurrentTemp; //this initalizes the delta and also updates the value everytime the method is run
 
+    if(intCurrentTemp < 46){
+        additionalCold = 20;
+    }else{
+        additionalCold = 0;
+    }
+
+    //THE BELOW CODE NEEDS TO HAVE THE CONDITIONS FIXED FOR SYNTAX
+    if(deltaTemp < 0){ //needs to cool down, so more fan
+        if((deltaTemp >= -75) && (deltaTemp <= -3)){ //big temp difference, use 100% duty cycle fan speed
+            TA0CCR1 = 255 + additionalCold;
+        }else if((deltaTemp > -3) && (deltaTemp <= -2)){ //med temp difference, use 50% duty cycle fan speed
+            TA0CCR1 = 150 + additionalCold;
+        }else if((deltaTemp > -2) && (deltaTemp <= -1)){ //low temp difference, use 25% duty cycle fan speed
+            TA0CCR1 = 70 + additionalCold;
+        }else{ //really low temp difference, use 12.5% duty cycle fan speed
+            TA0CCR1 = 70 + additionalCold;
+        }
+    }else if(deltaTemp > 0){ //need to heat up, so less fan
+        TA0CCR1 = 0;
+//        if((deltaTemp >= 75) && (deltaTemp <= 3)){ //big temp difference, use 12.5% duty cycle fan speed
+//            TA0CCR1 = 0;
+//        }else if((deltaTemp > 3) && (deltaTemp <= 2)){ //med temp difference, use 25% duty cycle fan speed
+//            TA0CCR1 = 64;
+//        }else if((deltaTemp > 2) && (deltaTemp <= 1)){ //low temp difference, use 50% duty cycle fan speed
+//            TA0CCR1 = 150;
+//        }else{ //really low temp difference, use 100% duty cycle fan speed
+//            TA0CCR1 = 64;
+//        }
+    }else{//change = 0
+        TA0CCR1 = 0;//do nothing
+    }
+
+}
+//
+//void cfgTimer(){
+//    TA1CTL = TASSEL_2 + MC_1 + ID_2 + TACLR;    // SMCLK divided by 4 in up mode (to CCR0)
+//
+//    TA1CCR0 =
+//}
+//
+
+void initializePWM() {
+   P1OUT &= ~BIT2; // initially sets the output to 0
+   P1SEL |= BIT2; // sets P1.2 to TA CCR1 Capture
+   P1DIR |= BIT2; // sets P1.2 to output
+
+   TA0CTL = TASSEL_2 + ID_0 + MC_1 + TACLR; // Configures TA0 to utilize SMCLK, an internal divider of 1, sets the clock to up mode, and initially clears the clock
+   TA0CCR0 = 255;
+
+   TA0CCR1 = 0; //set using value from thermistor (testing 255)
+
+   TA0CCTL1 = OUTMOD_7; // Sets TA0 to set/reset
+}
 int initializeADC(void){
 
     ADC12CTL0 = ADC12SHT02 + ADC12ON;         // Sampling time, ADC12 on
@@ -108,42 +172,55 @@ int setTemp(void){
     RT = (10000*(3.3/4096)*ADC12MEM0)/(3.3 - (ADC12MEM0*(3.3/4096)));
 
     if(RT >= 5933 && RT <= 15698){ //RANGE 15 deg - 35 deg
-         TEMP = -0.0022 * RT + 47.71;
+         currentTemp = -0.0022 * RT + 47.71;
     }else if(RT >= 1919 && RT < 5933){ //RANGE 40 deg - 65 deg
-         TEMP = -0.0076 * RT + 78.917;
+         currentTemp = -0.0076 * RT + 78.917;
     }else{//(RT >= 677 && RT < 1919) //RANGE 70 deg - 100 deg
-         TEMP = -0.0275 * RT + 116.24;
+         currentTemp = -0.0275 * RT + 116.24;
     }
-    intTemp = (int) TEMP;
-
+    intCurrentTemp = (int) currentTemp;
 }
-
 int main(void)
 {
     WDTCTL = WDTPW + WDTHOLD;                 // Stop WDT
     initializeADC();
     initializeUART();
+    initializePWM();
          // LPM0, ADC12_ISR will force exit
     while (1)
     {
       ADC12CTL0 |= ADC12SC;                   // Start sampling/conversion
       __bis_SR_register(LPM0_bits + GIE);
       setTemp();
+//      if(isDataSent == 1){
+//          controlFan();
+//      }
 
     }
 }
 
-
+//#pragma vector = USCI_UCRXIFG
+//__interrupt void RX_ISR(void){ //triggers when sent a temperature value in degrees Celsius to be held at
+//    goalTemp = UCA1RXBUF; //goalTemp variable stores value sent through UART
+//    UCA1TXBUF = intCurrentTemp; //send current temp through uart to realterm
+//
+//    UCA1IFG &= ~BIT0; //clears flag
+//
+//}
 
 #pragma vector=USCI_A1_VECTOR
 __interrupt void USCI_A1_ISR(void)
 {
     while(!(UCA1IFG & UCTXIFG));
-    UCA1TXBUF = intTemp;
-    UCA1IFG &= ~BIT0;//~UCTXIFG;
-
+    UCA1TXBUF = intCurrentTemp;
+    goalTemp = UCA1RXBUF;
+    isDataSent = 1;
+    //}
+    //UCA1IFG &= ~BIT0;//~UCTXIFG;
 
 }
+
+
 //#if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
 #pragma vector = ADC12_VECTOR
 __interrupt void ADC12_ISR(void){
@@ -152,6 +229,10 @@ __interrupt void ADC12_ISR(void){
   {
   case  6:                                  // Vector  6:  ADC12IFG0
       //VOLTAGE = ADC12MEM0; //Saves the resistance that is gotten from the Voltage divider
+      if(isDataSent == 1){
+          controlFan();
+      }
+
       if (ADC12MEM0 >= 0x7ff)                 // ADC12MEM = A0 > 0.5AVcc?
       {
           P1OUT |= BIT0;                        // P1.0 = 1
