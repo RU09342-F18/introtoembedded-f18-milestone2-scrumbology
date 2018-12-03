@@ -64,6 +64,11 @@
 //   April 2009
 //   Built with CCSv4 and IAR Embedded Workbench Version: 4.21
 //******************************************************************************
+// Authors: David Gaffney, Brian Harlow
+// Class: Intro to Embedded Systems
+// Section: 3
+// Date: 12/2/18
+// Milestone 2
 
 #include <msp430.h>
 #include <math.h>
