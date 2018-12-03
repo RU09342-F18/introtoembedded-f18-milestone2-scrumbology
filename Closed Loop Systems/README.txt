@@ -2,7 +2,7 @@ This program is used to control the environment created using a 12V fan, a 5V Vo
 The way that the program works is first the circuit using the fan, regulator, and thermistor must be set up. 
 The thermistor is set up in a voltage divider where the output goes to the ADC on the MSP430. 
 The fan is set up to be controlled using a mosfet, a feedback diode, and 2 resistors. 
-The regulator is set up using a circuit with a combination of parallel resistors with the capabality to disperse 2 Watts. 
+The regulator is set up using a circuit with a combination of parallel resistors with the capibality to disperse 2 Watts. 
 First the program stops the watchdog timer, then the ADC, UART, and PWM are all initialized. 
 Then in the while loop, the ADC starts sampling, the global interupts are enabled and low power mode is set, and setTemp is called.
 setTemp is used to calculate the temperature using the reading from the ADC.
